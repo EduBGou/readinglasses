@@ -1,0 +1,41 @@
+name: readinglasses
+
+services:
+  # db:
+  #   image: postgres:18-alpine
+  #   environment:
+  #     POSTGRESS_USER: myuser
+  #     POSTGRESS_PASSWORD: mypassword
+  #     POSTGRESS_DB: mydatabase
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgress_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    environment:
+      DATABSE_URL: "postgresql://myuser:mypassword@db:5432/mydatabase?schema=public"
+    ports:
+      - "3000:3000"
+    # depends_on:
+    #   - db
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
