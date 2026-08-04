@@ -8,7 +8,7 @@ export default router;
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-router.post('/', upload.any(), async (req: Request, res: Response): Promise<void> => {
+router.post('/', upload.any(), async (req, res): Promise<void> => {
 
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) {

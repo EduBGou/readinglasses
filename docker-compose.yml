@@ -12,16 +12,27 @@ services:
   #   volumes:
   #     - postgress_data:/var/lib/postgresql/data
 
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: libretranslate
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    # Optional: Keep translation models cached on your host machine so they don't re-download on restart
+    volumes:
+      - libretranslate_data:/home/libretranslate/.local
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
 
-    environment:
-      DATABSE_URL: "postgresql://myuser:mypassword@db:5432/mydatabase?schema=public"
+    # environment:
+      # DATABSE_URL: "postgresql://myuser:mypassword@db:5432/mydatabase?schema=public"
     ports:
       - "3000:3000"
-    # depends_on:
+    depends_on:
+      - libretranslate
     #   - db
     volumes:
       - ./backend:/app
@@ -38,4 +49,4 @@ services:
       - /app/node_modules
 
 volumes:
-  postgres_data:
+  libretranslate_data:
