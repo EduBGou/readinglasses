@@ -9,8 +9,8 @@ export default router;
 const upload = multer({ storage: multer.memoryStorage() });
 
 router.post('/', upload.any(), async (req, res): Promise<void> => {
-
   const files = req.files as Express.Multer.File[] | undefined;
+
   if (!files || files.length === 0) {
     res.status(400).json({ error: 'No file sent.' });
     return;
@@ -24,7 +24,7 @@ router.post('/', upload.any(), async (req, res): Promise<void> => {
     let resText = ""
     for (const file of files) {
       const { data } = await worker.recognize(file.buffer);
-      resText += data.text + '<END_PAGE/>';
+      resText += data.text + '\n---\n';
     }
     res.json({ text: resText.trim() });
   } catch (error) {

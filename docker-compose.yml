@@ -18,7 +18,6 @@ services:
     ports:
       - "5000:5000"
     restart: unless-stopped
-    # Optional: Keep translation models cached on your host machine so they don't re-download on restart
     volumes:
       - libretranslate_data:/home/libretranslate/.local
 
@@ -36,20 +35,27 @@ services:
     #   - db
     volumes:
       - ./backend:/app
-      - /app/node_modules
+      - backend_node_modules:/app/node_modules
       
     env_file:
       - /backend/.env
-
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "8081:8081"
+    
+    environment:
+      - EXPO_PACKAGER_PROXY_URL=http://10.1.1.125:8081
+
+    tty: true
+    stdin_open: true
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
 
 volumes:
+  backend_node_modules:
+  frontend_node_modules:
   libretranslate_data:
