@@ -1,13 +1,13 @@
-import React, { useState } from "react";
 import { Link } from "expo-router";
+import React, { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Button, StyleSheet, Text, View, TextInput } from "react-native";
 
 export default function Index() {
   return (
     <View style={styles.container}>
-      <Link href="/components/upload" asChild>
-        <Button title="Butao" />
+      <Link href="/upload" asChild>
+        <Button title="Selecionar Imagem" />
       </Link>
       <StatusBar style="auto" />
     </View>

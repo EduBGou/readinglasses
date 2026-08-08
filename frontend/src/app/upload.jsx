@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Button,
@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 
 export default function ImageUploader() {
@@ -28,6 +29,7 @@ export default function ImageUploader() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: Platform.OS === "android",
       mediaTypes: ["images"],
       quality: 0.8,
     });
@@ -48,6 +50,8 @@ export default function ImageUploader() {
 
     return { width, height };
   };
+
+  const previewSize = image ? getPreviewSize() : null;
 
   const scanImage = async () => {
     if (!image) return;
@@ -82,8 +86,6 @@ export default function ImageUploader() {
       }
 
       setResultText(data.text);
-
-      console.log("Upload OK:", data);
     } catch (err) {
       Alert.alert("Erro", "Não foi possível conectar ao servidor.");
       console.error("Upload error:", err);
@@ -91,22 +93,46 @@ export default function ImageUploader() {
     setLoading(false);
   };
 
-  const previewSize = image ? getPreviewSize() : null;
+  const rotate = async (quarterTurns) => {
+    if (!image) return;
+
+    try {
+      const result = await ImageManipulator.manipulateAsync(
+        image.uri,
+        [{ rotate: quarterTurns * 90 }],
+        {
+          format: ImageManipulator.SaveFormat.JPEG,
+        },
+      );
+
+      setImage(result);
+    } catch (error) {
+      console.error("Rotation error:", error);
+    }
+  };
+
+  useEffect(() => {
+    pickImage();
+  }, []);
 
   return (
     <ScrollView contentContainerStyle={{ alignItems: "center", padding: 16 }}>
-      <Button title="Selecionar imagem" onPress={pickImage} />
       {image && previewSize && (
-        <Image
-          source={{ uri: image.uri }}
-          style={{
-            width: previewSize.width,
-            height: previewSize.height,
-            borderRadius: 8,
-          }}
-          resizeMode="contain"
-        />
+        <>
+          <Image
+            source={{ uri: image.uri }}
+            style={{
+              width: previewSize.width,
+              height: previewSize.height,
+              borderRadius: 8,
+            }}
+            resizeMode="contain"
+          />
+          <Button title="Rotacionar +90º" onPress={() => rotate(1)} />
+          <Button title="Rotacionar -90º" onPress={() => rotate(-1)} />
+        </>
       )}
+
       {image && (
         <Button
           title={loading ? "Processando..." : "Escanear"}
