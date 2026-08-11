@@ -1,7 +1,11 @@
-export const Colors = {
-    slideBarBackground: '#1E2B26',
-    contentBackground: '#EDE7D8 ',
-    primaryAction: '#A9793E',
-    selected: '#B0492E',
-    active: '#3E6E82'
-}
+export const COLORS = {
+    ink: '#1C1917',
+    inkSoft: '#57534E',
+    florest: '#1E2B26',
+    paper: '#EDE7D8',
+    paperCard: '#FAFAF8',
+    amberSoft: '#F0C065',
+    amber: '#D9A441',
+    amberDark: '#B8842C',
+    error: '#C0483B',
+};

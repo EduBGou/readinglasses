@@ -1,25 +1,25 @@
 import { useState, useEffect } from "react";
 import {
-  View,
-  Button,
-  Image,
-  Alert,
-  useWindowDimensions,
-  ScrollView,
-  Text,
-  Platform,
+  View, Button, Image, Alert, useWindowDimensions, ScrollView, Text, Platform, Pressable, ActivityIndicator
 } from "react-native";
 
+import { COLORS } from "../../constants/colors";
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 export default function ImageUploader() {
   const [image, setImage] = useState(null);
   const [resultText, setResultText] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const { width } = useWindowDimensions();
-  const MAX_PREVIEW_WIDTH = Math.min(width * 0.5, 600);
+  const { width, height } = useWindowDimensions();
+
+  const IMAGE_CONTAINER_WIDTH = width * 0.7;
+  const IMAGE_CONTAINER_HEIGHT = height * 0.7;
+
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -39,19 +39,6 @@ export default function ImageUploader() {
       setResultText(null);
     }
   };
-
-  const getPreviewSize = () => {
-    if (!image?.width || !image?.height)
-      return { width: MAX_PREVIEW_WIDTH, height: MAX_PREVIEW_WIDTH };
-
-    const aspectRatio = image.width / image.height;
-    const width = Math.min(image.width, MAX_PREVIEW_WIDTH);
-    const height = width / aspectRatio;
-
-    return { width, height };
-  };
-
-  const previewSize = image ? getPreviewSize() : null;
 
   const scanImage = async () => {
     if (!image) return;
@@ -116,35 +103,79 @@ export default function ImageUploader() {
   }, []);
 
   return (
-    <ScrollView contentContainerStyle={{ alignItems: "center", padding: 16 }}>
-      {image && previewSize && (
-        <>
-          <Image
-            source={{ uri: image.uri }}
-            style={{
-              width: previewSize.width,
-              height: previewSize.height,
-              borderRadius: 8,
-            }}
-            resizeMode="contain"
-          />
-          <Button title="Rotacionar +90º" onPress={() => rotate(1)} />
-          <Button title="Rotacionar -90º" onPress={() => rotate(-1)} />
-        </>
-      )}
-
+    <View className="flex-1 items-center bg-paperCard px-6 pt-12 pb-16">
       {image && (
-        <Button
-          title={loading ? "Processando..." : "Escanear"}
-          onPress={scanImage}
-          disabled={loading}
-        />
-      )}
-      {resultText && (
-        <Text selectable style={{ marginTop: 12 }}>
-          {resultText}
-        </Text>
-      )}
-    </ScrollView>
-  );
+        <View className="gap-4" style={{ width: IMAGE_CONTAINER_WIDTH }}>
+          <View style={{ height: IMAGE_CONTAINER_HEIGHT, justifyContent: "center" }}>
+            <View className="rounded-md shadow-md">
+              {loading ? (
+                <ActivityIndicator color={COLORS.ink} style={{
+                  width: IMAGE_CONTAINER_WIDTH,
+                  height: IMAGE_CONTAINER_HEIGHT
+                }} />
+              ) : (
+                <ScrollView
+                  className="grow-0 rounded-md border-2 border-florest"
+                  showsVerticalScrollIndicator={false}
+                  style={{
+                    alignSelf: "flex-start",
+                    height: Math.min(IMAGE_CONTAINER_WIDTH * image.height / image.width, IMAGE_CONTAINER_HEIGHT)
+                  }}
+                >
+                  {resultText ? (
+                    <Text selectable style={{ marginTop: 12 }}>
+                      {resultText}
+                    </Text>
+                  ) : (
+                    <Image
+                      source={{ uri: image.uri }}
+                      style={{
+                            width: IMAGE_CONTAINER_WIDTH,
+                            height: IMAGE_CONTAINER_WIDTH * image.height / image.width
+                          }}
+                          resizeMode="contain"
+                        />
+                    )}
+
+                </ScrollView>)}
+            </View>
+          </View>
+
+          {!resultText && (
+            <View className="flex-row justify-between align-middle">
+              <Pressable
+                className="bg-transparent px-4 rounded-lg items-center justify-center"
+                onPress={() => rotate(-1)}
+              >
+                <FontAwesome6 name="arrow-rotate-left" size={24} color="black" />
+              </Pressable>
+
+              <Pressable
+                className={`
+                  bg-amber text-ink flex-row items-center rounded-full gap-4 p-4 shadow-sm shadow-amberSoft
+                  ${Platform.OS === "web" ? "transition-colors duration-200 hover:bg-amberSoft" :
+                    "active:bg-amberSoft"}
+                `}
+                onPress={scanImage}
+                disabled={loading}
+              >
+                {loading ? (
+                  <MaterialCommunityIcons name="cancel" size={18} color={COLORS.ink} />
+                ) :
+                  <Ionicons name="sparkles-outline" size={18} color={COLORS.ink} />
+                }
+                <Text className="font-md text-lg">{loading ? "Cancelar" : "Escanear"}</Text>
+              </Pressable>
+
+              <Pressable
+                className="bg-transparent px-4 rounded-lg items-center justify-center"
+                onPress={() => rotate(1)}
+              >
+                <FontAwesome6 name="arrow-rotate-right" size={24} color="black" />
+              </Pressable>
+            </View>
+          )}
+
+        </View >)}
+    </View>)
 }

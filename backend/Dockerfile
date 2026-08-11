@@ -1,6 +1,6 @@
 FROM node:23-alpine
 
-WORKDIR /app
+WORKDIR /backend
 
 COPY package*.json ./
 RUN npm ci
