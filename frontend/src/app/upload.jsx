@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  View, Button, Image, Alert, useWindowDimensions, ScrollView, Text, Platform, Pressable, ActivityIndicator
+  View, Image, Alert, useWindowDimensions, ScrollView, Text, Platform, Pressable, ActivityIndicator
 } from "react-native";
 
 import { COLORS } from "../../constants/colors";
@@ -15,11 +15,15 @@ export default function ImageUploader() {
   const [resultText, setResultText] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const [rangeStart, setRangeStart] = useState(-1);
+  const [selectedIdx, setSelectedIdx] = useState([]);
+
   const { width, height } = useWindowDimensions();
 
   const IMAGE_CONTAINER_WIDTH = width * 0.7;
   const IMAGE_CONTAINER_HEIGHT = height * 0.7;
 
+  const words = resultText ? resultText.split(/\s+/) : [""];
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -61,7 +65,7 @@ export default function ImageUploader() {
     formData.append("lang", "por");
 
     try {
-      const response = await fetch("http://10.1.1.125:3000/scan", {
+      const response = await fetch("http://192.168.18.5:3000/scan", {
         method: "POST",
         body: formData,
       });
@@ -98,6 +102,26 @@ export default function ImageUploader() {
     }
   };
 
+  const handleWordLongPress = (idx) => {
+    setSelectedIdx([])
+    setRangeStart(idx)
+  }
+
+  const handleWordPress = (idx) => {
+
+    if (selectedIdx.length > 0 && IndexIsInRange(idx)) setSelectedIdx([])
+
+    else if (rangeStart >= 0) {
+      setSelectedIdx([rangeStart, idx + 1])
+      setRangeStart(-1)
+    }
+    else setSelectedIdx([idx, idx + 1])
+  }
+
+  const IndexIsInRange = (idx) => {
+    return selectedIdx[0] <= idx && idx < selectedIdx[1]
+  }
+
   useEffect(() => {
     pickImage();
   }, []);
@@ -118,15 +142,23 @@ export default function ImageUploader() {
                   className="grow-0 rounded-md border-2 border-florest"
                   showsVerticalScrollIndicator={false}
                   style={{
-                    alignSelf: "flex-start",
+                    alignSelf: "stretch",
                     height: Math.min(IMAGE_CONTAINER_WIDTH * image.height / image.width, IMAGE_CONTAINER_HEIGHT)
                   }}
                 >
                   {resultText ? (
-                    <Text selectable style={{ marginTop: 12 }}>
-                      {resultText}
+                      <Text className="text-lg text-ink font-semibold leading-8 flex flex-wrap m-6" selectable={false}>
+                        {words.map((word, idx) =>
+                        (
+                          <Pressable onLongPress={() => handleWordLongPress(idx)}
+                            onPress={() => handleWordPress(idx)} className="inline-flex items-baseline">
+                            <Text key={idx} className={idx == rangeStart ? "bg-amber" :
+                              (IndexIsInRange(idx) ? "bg-amberSoft" : "")}> {word + " "}</Text>
+                          </Pressable>
+                        ))}
                     </Text>
                   ) : (
+
                     <Image
                       source={{ uri: image.uri }}
                       style={{
@@ -141,8 +173,22 @@ export default function ImageUploader() {
             </View>
           </View>
 
+          {resultText && (
+            <View className="flex-row items-center justify-center gap-2">
+              <MaterialCommunityIcons
+                name="gesture-tap"
+                size={17}
+                color={COLORS.inkSoft}
+              />
+
+              <Text className="text-sm text-inkSoft">
+                Toque para selecionar • Pressione e escolha outra palavra
+              </Text>
+            </View>
+          )}
+
           {!resultText && (
-            <View className="flex-row justify-between align-middle">
+            <View className="flex-row items-center justify-between">
               <Pressable
                 className="bg-transparent px-4 rounded-lg items-center justify-center"
                 onPress={() => rotate(-1)}
