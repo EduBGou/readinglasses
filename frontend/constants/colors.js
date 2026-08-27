@@ -8,4 +8,5 @@ export const COLORS = {
     amber: '#D9A441',
     amberDark: '#B8842C',
     error: '#C0483B',
+    glass: "#3E6E82"
 };

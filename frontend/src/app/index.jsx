@@ -1,7 +1,6 @@
 import { Link } from "expo-router";
-import React, { useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Button, StyleSheet, Text, View, TextInput } from "react-native";
+import { Button, StyleSheet, View, } from "react-native";
 
 export default function Index() {
   return (
