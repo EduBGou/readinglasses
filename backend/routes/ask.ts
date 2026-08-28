@@ -20,11 +20,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         });
 
         const result = await chat.sendMessage({
-            message: message
+            message: `Este seguinte trecho foi retirado de um documento ou livro, explique o que escritor quis dizer com: '${message}'. Responda-me no idioma do trecho.`
         });
 
         res.json({ answer: result.text });
-
     } catch (error) {
         console.error("Gemini API Error - ", error);
         res.status(500).json({ error: "Failed to generate AI response." });

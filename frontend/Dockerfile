@@ -8,4 +8,4 @@ COPY . .
 
 EXPOSE 8081
 
-CMD ["npx", "expo", "start", "--host", "lan", "--clear"]
+CMD ["npm", "run", "start"]

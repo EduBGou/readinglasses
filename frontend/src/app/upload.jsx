@@ -12,11 +12,12 @@ import * as ImagePicker from "expo-image-picker";
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 export default function ImageUploader() {
+  const API_URL = process.env.EXPO_PUBLIC_BACKEND_API_URL;
+
   const [image, setImage] = useState(null);
   const [resultText, setResultText] = useState(null);
-  const [translatedText, setTranslatedText] = useState(null);
+  const [sidebarText, setSidebarText] = useState(null);
   const [loading, setLoading] = useState(false);
-
   const [rangeStart, setRangeStart] = useState(-1);
   const [selectedIdx, setSelectedIdx] = useState([]);
 
@@ -28,7 +29,7 @@ export default function ImageUploader() {
 
   const words = resultText ? resultText.split(/\s+/) : [""];
 
-  const [activeAction, setActiveAction] = useState(null); // "translate" | "askIA" | null
+  const [activeAction, setActiveAction] = useState(null);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -70,7 +71,7 @@ export default function ImageUploader() {
     formData.append("lang", "por");
 
     try {
-      const response = await fetch("http://192.168.18.5:3000/scan", {
+      const response = await fetch(`${API_URL}/scan`, {
         method: "POST",
         body: formData,
       });
@@ -137,20 +138,39 @@ export default function ImageUploader() {
   const translate = async () => {
     try {
       setActiveAction("translate");
-      let url = `http://192.168.18.5:3000/translate?sl=pt&tl=en&text=${encodeURIComponent(getSelectedString())}`;
+      let url = `${API_URL}/translate?sl=pt&tl=en&text=${encodeURIComponent(getSelectedString())}`;
       const response = await fetch(url, { method: "GET" });
       const data = await response.json();
       const text = data.translatedText;
-      setTranslatedText(text)
+      setSidebarText(text)
     }
     catch {
       console.log("translate error");
     }
   }
 
-  const askIA = () => {
+  const askIA = async () => {
+
+    const payload = {
+      message: getSelectedString()
+    }
+
     setActiveAction("askIA");
-    console.log("Ask IA pressed")
+    try {
+      let url = `${API_URL}/ask`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload)
+      })
+      const data = await response.json();
+      const answer = data.answer;
+      setSidebarText(answer)
+    } catch {
+      console.log("ask IA error")
+    }
   }
 
   useEffect(() => {
@@ -188,9 +208,14 @@ export default function ImageUploader() {
                           <Text className="text-lg text-ink font-medium leading-8 flex flex-wrap m-6" selectable={false}>
                             {words.map((word, idx) =>
                             (
-                              <Pressable key={idx} onLongPress={() => handleWordLongPress(idx)}
-                                onPress={() => handleWordPress(idx)} className="inline-flex items-baseline">
-                                <Text key={idx} className={idx == rangeStart ? "bg-amber" :
+                              <Pressable
+                                key={idx}
+                                onLongPress={() => handleWordLongPress(idx)}
+                                onPress={() => handleWordPress(idx)}
+                                className="inline-flex items-baseline">
+                                <Text key={idx}
+                                  selectable={false}
+                                  className={idx == rangeStart ? "bg-amber" :
                                   (IndexIsInRange(idx) ? "bg-amberSoft" : "")}> {word + " "}</Text>
                               </Pressable>
                             ))}
@@ -270,9 +295,9 @@ export default function ImageUploader() {
             <MainActionPressable enabled={hasTextSelected()} label="Translate" callableOnPress={translate} active={activeAction === "translate"} />
             <MainActionPressable enabled={hasTextSelected()} label="Ask IA" callableOnPress={askIA} active={activeAction === "askIA"} />
           </View>
-          {translatedText && (
-            <ScrollView className="flex-1 mt-2">
-              <Text className="text-paper text-base font-light">{translatedText}</Text>
+          {sidebarText && (
+            <ScrollView className="flex-1 mt-2" showsVerticalScrollIndicator={false}>
+              <Text className="text-paper text-base font-light">{sidebarText}</Text>
             </ScrollView>
           )
           }

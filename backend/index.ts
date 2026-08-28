@@ -10,9 +10,7 @@ import translateRoutes from './routes/translate.ts'
 
 app.use(cors({
   origin: [
-    "http://localhost:8081",
-    "http://192.168.18.5:8081"
-  ]
+    "http://localhost:8081"]
 }));
 
 app.use(express.json());
