@@ -1,40 +1,156 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  View, Image, Alert, useWindowDimensions, ScrollView, Text, Platform, Pressable, ActivityIndicator
+  View, Image, useWindowDimensions, ScrollView, Text, Platform, Pressable, ActivityIndicator
 } from "react-native";
-
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { File } from "expo-file-system";
 import MainActionPressable from "./components/mainActionPressable";
 import { COLORS } from "../../constants/colors";
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { FontAwesome6 } from "@expo/vector-icons"; import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
+const API_URL = `${process.env.EXPO_PUBLIC_BACKEND_HOST}:${process.env.EXPO_PUBLIC_BACKEND_PORT}`;
+
+const RESULT_LABEL = { translate: "Tradução", askIA: "Resposta da IA" };
+
+/* ---------- Small building blocks ---------- */
+
+
+function IconButton({ onPress, label, disabled, children }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className={`h-12 w-12 items-center justify-center rounded-full border border-florest/20 bg-white active:bg-amberSoft ${disabled ? "opacity-40" : ""
+        }`}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+function TextButton({ onPress, icon, label, classname = "" }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      className="flex-row items-center gap-2 rounded-full px-3 py-2 transition-colors duration-200 hover:bg-amberSoft active:bg-amberSoft {className}`"
+    >
+      <Ionicons name={icon} size={18} color={COLORS.ink} />
+      <Text className="text-sm font-medium text-ink">{label}</Text>
+    </Pressable>
+  );
+}
+
+function ErrorBanner({ message, onDismiss }) {
+  return (
+    <View
+      accessibilityRole="alert"
+      className="flex-row items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3"
+    >
+      <Ionicons name="alert-circle-outline" size={20} color="#991b1b" />
+      <Text className="flex-1 text-sm text-red-800">{message}</Text>
+      <Pressable onPress={onDismiss} accessibilityLabel="Fechar aviso" hitSlop={10}>
+        <Ionicons name="close" size={18} color="#991b1b" />
+      </Pressable>
+    </View>
+  );
+}
+
+function EmptyState({ onPick }) {
+  return (
+    <View className="items-center gap-4 rounded-2xl border border-dashed border-florest/30 bg-white px-6 py-16">
+      <View className="h-16 w-16 items-center justify-center rounded-full bg-amberSoft">
+        <Ionicons name="image-outline" size={30} color={COLORS.ink} />
+      </View>
+      <View className="items-center gap-1">
+        <Text className="text-lg font-semibold text-ink">Nenhuma imagem selecionada</Text>
+        <Text className="text-center text-sm text-inkSoft">
+          Escolha a foto de um texto para escanear e traduzir.
+        </Text>
+      </View>
+      <Pressable
+        onPress={onPick}
+        accessibilityRole="button"
+        className="rounded-full bg-amber px-6 py-3 active:bg-amberSoft"
+      >
+        <Text className="text-base font-semibold text-ink">Escolher imagem</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/* ---------- Main component ---------- */
 export default function ImageUploader() {
-  const API_URL = process.env.EXPO_PUBLIC_BACKEND_API_URL;
+  return (
+    <SafeAreaProvider>
+      <ImageUploaderContent />
+    </SafeAreaProvider>
+  )
 
+}
+function ImageUploaderContent() {
   const [image, setImage] = useState(null);
   const [resultText, setResultText] = useState(null);
-  const [sidebarText, setSidebarText] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
   const [rangeStart, setRangeStart] = useState(-1);
   const [selectedIdx, setSelectedIdx] = useState([]);
 
-  const { width, height } = useWindowDimensions();
-
-  const WINDOW_ASPECT_RATIO = width / height
-  const IMAGE_CONTAINER_WIDTH = width * 0.8;
-  const IMAGE_CONTAINER_HEIGHT = height * 0.7;
-
-  const words = resultText ? resultText.split(/\s+/) : [""];
-
   const [activeAction, setActiveAction] = useState(null);
+  const [sidebarText, setSidebarText] = useState(null);
+  const [sidebarLoading, setSidebarLoading] = useState(false);
+  const [sidebarError, setSidebarError] = useState(null);
+
+  const [boxWidth, setBoxWidth] = useState(0);
+
+  const abortRef = useRef(null);
+  const requestRef = useRef(0);
+
+  const { width, height } = useWindowDimensions();
+  const isPortrait = width / height < 1;
+  const BOX_MAX_HEIGHT = height * 0.62;
+
+  const words = useMemo(() => (resultText ? resultText.trim().split(/\s+/) : []), [resultText]);
+  const insets = useSafeAreaInsets();
+
+  const isInRange = (idx) => selectedIdx[0] <= idx && idx < selectedIdx[1];
+
+  const selectedString =
+    selectedIdx.length === 2 ? words.slice(selectedIdx[0], selectedIdx[1]).join(" ") : "";
+  const hasTextSelected = selectedString !== "";
+
+  const handleWordLongPress = (idx) => {
+    setSelectedIdx([]);
+    setRangeStart(idx);
+  };
+
+  const handleWordPress = (idx) => {
+    if (selectedIdx.length > 0 && isInRange(idx)) {
+      setSelectedIdx([]);
+    } else if (rangeStart >= 0) {
+      setSelectedIdx([Math.min(rangeStart, idx), Math.max(rangeStart, idx) + 1]);
+      setRangeStart(-1);
+    } else {
+      setSelectedIdx([idx, idx + 1]);
+    }
+  };
+
+  const resetReading = () => {
+    setResultText(null);
+    setSelectedIdx([]);
+    setRangeStart(-1);
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permissão negada", "Precisamos de acesso às fotos.");
+      setError("Precisamos de acesso às suas fotos. Ative a permissão nas configurações do aparelho.");
       return;
     }
 
@@ -46,263 +162,301 @@ export default function ImageUploader() {
 
     if (!result.canceled) {
       setImage(result.assets[0]);
-      setResultText(null);
+      setError(null);
+      resetReading();
     }
-  };
-
-  const scanImage = async () => {
-    if (!image) return;
-    setLoading(true);
-
-    const formData = new FormData();
-
-    if (Platform.OS === "web") {
-      const blob = await fetch(image.uri).then((r) => r.blob());
-
-      formData.append("images", blob, image.fileName ?? "upload.jpg");
-    } else {
-      formData.append("images", {
-        uri: image.uri,
-        name: image.fileName ?? "upload.jpg",
-        type: image.mimeType ?? "image/jpeg",
-      });
-    }
-
-    formData.append("lang", "por");
-
-    try {
-      const response = await fetch(`${API_URL}/scan`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert("Erro", data.error || "Falha ao processar a imagem.");
-        return;
-      }
-
-      setResultText(data.text);
-    } catch (err) {
-      Alert.alert("Erro", "Não foi possível conectar ao servidor.");
-      console.error("Upload error:", err);
-    }
-    setLoading(false);
   };
 
   const rotate = async (quarterTurns) => {
     if (!image) return;
-
     try {
       const result = await ImageManipulator.manipulateAsync(
         image.uri,
         [{ rotate: quarterTurns * 90 }],
-        {
-          format: ImageManipulator.SaveFormat.JPEG,
-        },
+        { format: ImageManipulator.SaveFormat.JPEG }
       );
-
       setImage(result);
-    } catch (error) {
-      console.error("Rotation error:", error);
+    } catch (err) {
+      console.error("Rotation error:", err);
+      setError("Não foi possível girar a imagem.");
     }
   };
 
-  const handleWordLongPress = (idx) => {
-    setSelectedIdx([])
-    setRangeStart(idx)
-  }
+  const scanImage = async () => {
+    if (!image || loading) return;
 
-  const handleWordPress = (idx) => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true);
+    setError(null);
 
-    if (selectedIdx.length > 0 && IndexIsInRange(idx)) setSelectedIdx([])
-
-    else if (rangeStart >= 0) {
-      setSelectedIdx([Math.min(rangeStart, idx), Math.max(rangeStart, idx) + 1])
-      setRangeStart(-1)
-    }
-    else setSelectedIdx([idx, idx + 1])
-  }
-
-  const IndexIsInRange = (idx) => {
-    return selectedIdx[0] <= idx && idx < selectedIdx[1]
-  }
-
-  const getSelectedString = () => {
-    if (selectedIdx.length != 2) return ""
-    return words.slice(selectedIdx[0], selectedIdx[1]).join(" ")
-  }
-
-  const hasTextSelected = () => { return getSelectedString() !== "" }
-
-  const translate = async () => {
     try {
-      setActiveAction("translate");
-      let url = `${API_URL}/translate?sl=pt&tl=en&text=${encodeURIComponent(getSelectedString())}`;
-      const response = await fetch(url, { method: "GET" });
-      const data = await response.json();
-      const text = data.translatedText;
-      setSidebarText(text)
-    }
-    catch {
-      console.log("translate error");
-    }
-  }
+      const formData = new FormData();
 
-  const askIA = async () => {
+      if (Platform.OS === "web") {
+        const blob = await fetch(image.uri).then((r) => r.blob());
+        formData.append("images", blob, image.fileName ?? "upload.jpg");
+      } else {
+        formData.append("images", new File(image.uri));
+      }
+      formData.append("lang", "por");
 
-    const payload = {
-      message: getSelectedString()
-    }
-
-    setActiveAction("askIA");
-    try {
-      let url = `${API_URL}/ask`;
-      const response = await fetch(url, {
+      const response = await fetch(`${API_URL}/scan`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload)
-      })
+        body: formData,
+        signal: controller.signal,
+      });
       const data = await response.json();
-      const answer = data.answer;
-      setSidebarText(answer)
-    } catch {
-      console.log("ask IA error")
+
+      if (!response.ok) {
+        setError(data.error || "Falha ao processar a imagem.");
+        return;
+      }
+      setResultText(data.text);
+    } catch (err) {
+      if (err?.name === "AbortError") return; // cancelled by the user
+      console.error("Upload error:", err);
+      setError("Não foi possível conectar ao servidor. Verifique sua conexão e tente de novo.");
+    } finally {
+      setLoading(false);
+      abortRef.current = null;
     }
-  }
+  };
+
+  const cancelScan = () => abortRef.current?.abort();
+
+  /* ----- sidebar actions ----- */
+
+  const runAction = async (action, request) => {
+    const id = ++requestRef.current;
+    setActiveAction(action);
+    setSidebarLoading(true);
+    setSidebarText(null);
+    setSidebarError(null);
+
+    try {
+      const text = await request();
+      if (id === requestRef.current) setSidebarText(text);
+    } catch (err) {
+      console.log(`${action} error`, err);
+      if (id === requestRef.current) {
+        setSidebarError("Algo deu errado. Toque no botão para tentar novamente.");
+      }
+    } finally {
+      if (id === requestRef.current) setSidebarLoading(false);
+    }
+  };
+
+  const translate = () =>
+    runAction("translate", async () => {
+      const url = `${API_URL}/translate?sl=pt&tl=en&text=${encodeURIComponent(selectedString)}`;
+      const response = await fetch(url, { method: "GET" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      return data.translatedText;
+    });
+
+  const askIA = () =>
+    runAction("askIA", async () => {
+      const response = await fetch(`${API_URL}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: selectedString }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      return data.answer;
+    });
+
+  /* ----- effects ----- */
 
   useEffect(() => {
     pickImage();
   }, []);
 
+  // A new selection invalidates whatever the sidebar was showing.
   useEffect(() => {
-    if (!hasTextSelected()) setActiveAction(null);
+    requestRef.current++;
+    setActiveAction(null);
+    setSidebarText(null);
+    setSidebarError(null);
+    setSidebarLoading(false);
   }, [selectedIdx]);
 
+  /* ----- derived UI ----- */
+
+  const imageHeight =
+    image && boxWidth
+      ? Math.min((boxWidth * image.height) / image.width, BOX_MAX_HEIGHT)
+      : BOX_MAX_HEIGHT;
+
+  const hint =
+    rangeStart >= 0
+      ? "Agora toque na última palavra do trecho"
+      : hasTextSelected
+        ? "Toque no trecho selecionado para limpar"
+        : "Toque em uma palavra ou segure para marcar um trecho";
+
+  /* ----- render ----- */
+
   return (
-    <View className={"flex-1 " + (WINDOW_ASPECT_RATIO < 1 ? "flex-col" : "flex-row")}>
+    <View className={"flex-1 bg-paper " + (isPortrait ? "flex-col" : "flex-row")}>
       <View className="flex-1">
-        <ScrollView contentContainerClassName="items-center px-6 pt-12 pb-16"
-          className="flex h-full flex-1">
-          {image && (
-            <View className="gap-4 flex-1" style={{ maxWidth: IMAGE_CONTAINER_WIDTH }}>
-              <View style={{ height: IMAGE_CONTAINER_HEIGHT, justifyContent: "center" }}>
-                <View className="rounded-md shadow-md">
-                  {loading ? (
-                    <ActivityIndicator color={COLORS.ink} style={{
-                      width: IMAGE_CONTAINER_WIDTH,
-                      height: IMAGE_CONTAINER_HEIGHT
-                    }} />
-                  ) : (
-                    <ScrollView
-                      className="grow-0 rounded-md border-2 border-florest"
-                      showsVerticalScrollIndicator={false}
-                      style={{
-                        alignSelf: "stretch",
-                        height: Math.min(IMAGE_CONTAINER_WIDTH * image.height / image.width, IMAGE_CONTAINER_HEIGHT)
-                      }}
-                    >
-                      {resultText ? (
-                          <Text className="text-lg text-ink font-medium leading-8 flex flex-wrap m-6" selectable={false}>
-                            {words.map((word, idx) =>
-                            (
-                              <Pressable
-                                key={idx}
-                                onLongPress={() => handleWordLongPress(idx)}
-                                onPress={() => handleWordPress(idx)}
-                                className="inline-flex items-baseline">
-                                <Text key={idx}
-                                  selectable={false}
-                                  className={idx == rangeStart ? "bg-amber" :
-                                  (IndexIsInRange(idx) ? "bg-amberSoft" : "")}> {word + " "}</Text>
-                              </Pressable>
-                            ))}
-                          </Text>
-                        ) : (
-
-                            <Image
-                              source={{ uri: image.uri }}
-                              style={{
-                            width: IMAGE_CONTAINER_WIDTH,
-                            height: IMAGE_CONTAINER_WIDTH * image.height / image.width
-                          }}
-                          resizeMode="contain"
-                        />
-                        )}
-
-                    </ScrollView>)}
-                </View>
+        <ScrollView contentContainerClassName="items-center px-5 pb-10 pt-8 grow">
+          <View className="w-full max-w-2xl gap-5">
+            {image && (
+              <View className="flex-row items-center justify-end">
+                <TextButton onPress={pickImage} icon="images-outline" label="Trocar imagem" />
               </View>
+            )}
 
-              {resultText && (
-                <View className="flex-row items-center justify-center gap-2">
-                  <MaterialCommunityIcons
-                    name="gesture-tap"
-                    size={17}
-                    color={COLORS.inkSoft}
-                  />
+            {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-                  <Text className="text-sm text-inkSoft">
-                    Toque para selecionar • Pressione e escolha outra palavra
+            {!image && <EmptyState onPick={pickImage} />}
+
+            {image && (
+              <View
+                onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}
+                className="overflow-hidden rounded-2xl border border-florest/15 bg-white shadow-md"
+              >
+                {resultText ? (
+                  <ScrollView
+                    style={{ maxHeight: BOX_MAX_HEIGHT }}
+                    contentContainerClassName="p-5"
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <View className="flex-row flex-wrap">
+                      {words.map((word, idx) => (
+                        <Pressable
+                          key={idx}
+                          onLongPress={() => handleWordLongPress(idx)}
+                          onPress={() => handleWordPress(idx)}
+                          accessibilityRole="button"
+                          accessibilityLabel={word}
+                          accessibilityState={{ selected: isInRange(idx) }}
+                          className={
+                            "px-[3px] " +
+                            (idx === rangeStart ? "bg-amber" : isInRange(idx) ? "bg-amberSoft" : "")
+                          }
+                        >
+                          <Text className="text-lg font-medium leading-8 text-ink" selectable={false}>
+                            {word}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                ) : (
+                    <View>
+                      <Image
+                        source={{ uri: image.uri }}
+                        style={{ width: "100%", height: imageHeight }}
+                        resizeMode="contain"
+                        className={loading ? "opacity-30" : ""}
+                      />
+                      {loading && (
+                        <View className="absolute inset-0 items-center justify-center gap-3">
+                          <ActivityIndicator size="large" color={COLORS.ink} />
+                          <Text className="text-sm font-medium text-ink">Lendo o texto…</Text>
+                        </View>
+                      )}
+                    </View>
+                )}
+              </View>
+            )}
+
+            {/* Controls below the card */}
+            {image && !resultText && (
+              <View className="flex-row items-center justify-center gap-5">
+                <IconButton onPress={() => rotate(-1)} label="Girar para a esquerda" disabled={loading}>
+                  <FontAwesome6 name="arrow-rotate-left" size={18} color={COLORS.ink} />
+                </IconButton>
+
+                <Pressable
+                  onPress={loading ? cancelScan : scanImage}
+                  accessibilityRole="button"
+                  accessibilityLabel={loading ? "Cancelar escaneamento" : "Escanear imagem"}
+                  className={`min-w-40 flex-row items-center justify-center gap-3 rounded-full bg-amber px-7 py-4 shadow-sm active:bg-amberSoft ${Platform.OS === "web" ? "transition-colors duration-200 hover:bg-amberSoft" : ""
+                    }`}
+                >
+                  {loading ? (
+                    <MaterialCommunityIcons name="close-circle-outline" size={20} color={COLORS.ink} />
+                  ) : (
+                    <Ionicons name="sparkles-outline" size={20} color={COLORS.ink} />
+                  )}
+                  <Text className="text-lg font-semibold text-ink">
+                    {loading ? "Cancelar" : "Escanear"}
                   </Text>
-                </View>
-              )}
+                </Pressable>
 
-              {!resultText && (
-                <View className="flex-row items-center justify-between">
-                  <Pressable
-                    className="bg-transparent px-4 rounded-lg items-center justify-center"
-                    onPress={() => rotate(-1)}
-                  >
-                    <FontAwesome6 name="arrow-rotate-left" size={24} color="black" />
-                  </Pressable>
+                <IconButton onPress={() => rotate(1)} label="Girar para a direita" disabled={loading}>
+                  <FontAwesome6 name="arrow-rotate-right" size={18} color={COLORS.ink} />
+                </IconButton>
+              </View>
+            )}
 
-                  <Pressable
-                    className={`
-                  bg-amber text-ink flex-row items-center rounded-full gap-4 p-4 shadow-sm shadow-amberSoft
-                  ${Platform.OS === "web" ? "transition-colors duration-200 hover:bg-amberSoft" :
-                      "active:bg-amberSoft"}
-                `}
-                    onPress={scanImage}
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <MaterialCommunityIcons name="cancel" size={18} color={COLORS.ink} />
-                    ) :
-                      <Ionicons name="sparkles-outline" size={18} color={COLORS.ink} />
-                    }
-                    <Text className="font-md text-lg">{loading ? "Cancelar" : "Escanear"}</Text>
-                  </Pressable>
-
-                  <Pressable
-                    className="bg-transparent px-4 rounded-lg items-center justify-center"
-                    onPress={() => rotate(1)}
-                  >
-                    <FontAwesome6 name="arrow-rotate-right" size={24} color="black" />
-                  </Pressable>
-                </View>
-              )}
-
-            </View >)}
-
-        </ScrollView>
-      </View >
-      {resultText && (
-        <View className={"bg-florest p-4 flex-1 " + (WINDOW_ASPECT_RATIO < 1 ? "max-h-64" : "max-w-96")}>
-          <View className="flex flex-row gap-4">
-            <MainActionPressable enabled={hasTextSelected()} label="Translate" callableOnPress={translate} active={activeAction === "translate"} />
-            <MainActionPressable enabled={hasTextSelected()} label="Ask IA" callableOnPress={askIA} active={activeAction === "askIA"} />
+            {resultText && (
+              <View className="flex-row items-center justify-center gap-2">
+                <MaterialCommunityIcons name="gesture-tap" size={17} color={COLORS.inkSoft} />
+                <Text className="text-sm text-inkSoft">{hint}</Text>
+              </View>
+            )}
           </View>
-          {sidebarText && (
-            <ScrollView className="flex-1 mt-2" showsVerticalScrollIndicator={false}>
-              <Text className="text-paper text-base font-light">{sidebarText}</Text>
-            </ScrollView>
-          )
+        </ScrollView>
+      </View>
+
+      {/* Sidebar / bottom sheet */}
+      {resultText && (
+        <View
+          style={isPortrait ? { paddingBottom: insets.bottom + 20 } : undefined}
+          className={
+            "gap-4 bg-florest p-5 " +
+            (isPortrait ? "rounded-t-3xl" : "w-96 rounded-l-3xl")
           }
+        >
+          <View className="flex-row gap-3">
+            <MainActionPressable
+              enabled={hasTextSelected}
+              label="Traduzir"
+              callableOnPress={translate}
+              active={activeAction === "translate"}
+            />
+            <MainActionPressable
+              enabled={hasTextSelected}
+              label="Perguntar à IA"
+              callableOnPress={askIA}
+              active={activeAction === "askIA"}
+            />
+          </View>
+
+          {!hasTextSelected && (
+            <Text className="text-sm leading-6 text-paper/70">
+              Selecione uma palavra ou um trecho para traduzir ou perguntar à IA.
+            </Text>
+          )}
+
+          {hasTextSelected && (
+            <Text numberOfLines={2} className="border-l-2 border-amber pl-3 text-sm italic text-paper/80">
+              {selectedString}
+            </Text>
+          )}
+
+          {sidebarLoading && <ActivityIndicator color={COLORS.paper ?? "#fff"} className="self-start" />}
+
+          {sidebarError && <Text className="text-sm text-red-200">{sidebarError}</Text>}
+
+          {sidebarText && (
+            <ScrollView className={isPortrait ? "grow-0" : "flex-1"}
+              style={isPortrait ? { maxHeight: height * 0.4 } : undefined}
+              showsVerticalScrollIndicator={false}>
+              <Text className="mb-1 text-sm font-semibold text-amber">
+                {RESULT_LABEL[activeAction]}
+              </Text>
+              <Text className="text-base font-light leading-7 text-paper">{sidebarText}</Text>
+            </ScrollView>
+          )}
         </View>
       )}
-    </View >
-  )
+    </View>
+  );
 }
